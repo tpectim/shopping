@@ -191,33 +191,33 @@
             </label>
             <label class="flex items-center gap-1 cursor-pointer shrink-0">
               <span class="font-bold">待結帳區:</span>
-              <input type="range" v-model.number="scales.shopCart" min="0.6" max="1.6" step="0.05" class="w-14 sm:w-20 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+              <input type="range" v-model.number="scales.shopCart" min="0.6" max="10.6" step="0.05" class="w-14 sm:w-20 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
             </label>
           </template>
 
           <template v-else-if="phase === 'pay'">
             <label class="flex items-center gap-1 cursor-pointer shrink-0">
               <span class="font-bold">購買確認清單:</span>
-              <input type="range" v-model.number="scales.payCart" min="0.6" max="1.6" step="0.05" class="w-12 sm:w-16 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+              <input type="range" v-model.number="scales.payCart" min="0.6" max="6.6" step="0.05" class="w-12 sm:w-16 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
             </label>
             <label class="flex items-center gap-1 cursor-pointer shrink-0">
               <span class="font-bold">投入付款區:</span>
-              <input type="range" v-model.number="scales.payPaid" min="0.6" max="1.6" step="0.05" class="w-12 sm:w-16 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+              <input type="range" v-model.number="scales.payPaid" min="0.6" max="10.6" step="0.05" class="w-12 sm:w-16 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
             </label>
             <label class="flex items-center gap-1 cursor-pointer shrink-0">
               <span class="font-bold">下方幣鈔:</span>
-              <input type="range" v-model.number="scales.payCoins" min="0.6" max="1.6" step="0.05" class="w-12 sm:w-16 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+              <input type="range" v-model.number="scales.payCoins" min="0.6" max="10.6" step="0.05" class="w-12 sm:w-16 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
             </label>
           </template>
 
           <template v-else-if="phase === 'result'">
             <label class="flex items-center gap-1 cursor-pointer shrink-0">
               <span class="font-bold">總計金額區:</span>
-              <input type="range" v-model.number="scales.resultSummary" min="0.6" max="1.6" step="0.05" class="w-14 sm:w-20 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+              <input type="range" v-model.number="scales.resultSummary" min="0.6" max="10.6" step="0.05" class="w-14 sm:w-20 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
             </label>
             <label class="flex items-center gap-1 cursor-pointer shrink-0">
               <span class="font-bold">找零圖示:</span>
-              <input type="range" v-model.number="scales.resultChange" min="0.6" max="1.6" step="0.05" class="w-14 sm:w-20 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+              <input type="range" v-model.number="scales.resultChange" min="0.6" max="10.6" step="0.05" class="w-14 sm:w-20 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
             </label>
           </template>
         </div>
