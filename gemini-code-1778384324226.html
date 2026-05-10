@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>互動式購物與付款練習</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <style>
+    /* 確保觸控點擊時有平滑過渡與明顯反饋 */
+    .touch-target { transition: all 0.1s ease-in-out; }
+    .touch-target:active { transform: scale(0.95); }
+    /* 自訂簡潔的滾動條樣式，避免佔據過多版面 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: #c5c5c5; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+  </style>
+</head>
+<body class="bg-slate-100 font-sans h-screen w-screen overflow-hidden select-none">
+
+  <div id="app" class="h-screen w-screen flex flex-col overflow-hidden p-2 sm:p-3 max-w-7xl mx-auto">
+    
+    <header v-if="phase === 'setup'" class="text-center mb-3 shrink-0">
+      <h1 class="text-2xl sm:text-3xl font-bold tracking-wider text-indigo-700">🛒 購物與付款綜合練習</h1>
+      <p class="text-gray-500 mt-1 text-xs sm:text-sm">全螢幕觸控最佳化版・支援分區大小獨立調整與本機記憶</p>
+    </header>
+
+    <div v-if="phase === 'setup'" class="bg-white rounded-2xl shadow-xl p-4 sm:p-6 border-t-8 border-indigo-500 flex-1 overflow-y-auto space-y-6 min-h-0">
+      
+      <div class="bg-slate-50 p-4 rounded-xl space-y-3 border border-slate-200">
+        <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+          <span>📁 1. 選擇或載入題庫資料</span>
+        </h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div class="space-y-1 md:col-span-2">
+            <label class="block text-xs sm:text-sm font-medium text-slate-600 flex justify-between items-center">
+              <span>從 GitHub 遠端自動搜尋或選擇來源：</span>
+              <button @click="fetchGithubRepoContents" class="text-xs text-indigo-600 hover:text-indigo-800 underline font-bold touch-target">
+                🔄 重新整理檔案清單
+              </button>
+            </label>
+            
+            <select v-model="selectedPreset" @change="handlePresetChange" class="w-full p-2.5 bg-white border border-gray-300 rounded-lg shadow-sm text-base focus:ring-2 focus:ring-indigo-500 font-medium">
+              <optgroup label="🌐 GitHub 遠端題庫 (自動讀取 tpectim/picoffline)">
+                <option v-if="isFetchingList" value="" disabled>⏳ 正在連線讀取 JSON 檔案清單...</option>
+                <option v-for="file in remoteJsonFiles" :key="file.name" :value="file.url">
+                  📄 {{ file.name }}
+                </option>
+                <option v-if="!isFetchingList && remoteJsonFiles.length === 0" value="" disabled>⚠️ 未找到或無法讀取遠端檔案</option>
+              </optgroup>
+              
+              <optgroup label="內建與自訂來源">
+                <option value="default">🍎 內建基礎範例題庫 (水果與常用幣鈔)</option>
+                <option value="custom">✏️ 自訂其他 JSON 檔案網址...</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <button @click="fetchRemoteJson" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow touch-target text-base">
+            🌐 手動確認載入
+          </button>
+        </div>
+
+        <div v-if="selectedPreset === 'custom'" class="mt-2">
+          <input v-model="customUrl" type="text" placeholder="請填入完整的 JSON 網址" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+        </div>
+
+        <div class="flex flex-wrap gap-3 pt-2 border-t border-gray-200 justify-between items-center text-sm">
+          <div class="flex gap-3 w-full md:w-auto">
+            <input type="file" ref="fileInput" @change="importLocalJson" accept=".json" class="hidden">
+            <button @click="$refs.fileInput.click()" class="flex-1 md:flex-none px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow touch-target">
+              📂 本機匯入 JSON
+            </button>
+            <button @click="exportLocalJson" class="flex-1 md:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg shadow touch-target">
+              💾 匯出目前設定
+            </button>
+          </div>
+          <span v-if="loadStatusText" class="font-semibold px-2 py-1 rounded bg-indigo-50 text-indigo-700 animate-pulse">
+            {{ loadStatusText }}
+          </span>
+        </div>
+      </div>
+
+      <div class="bg-indigo-50/50 p-4 rounded-xl space-y-3 border border-indigo-100">
+        <h2 class="text-lg font-bold text-indigo-900">⚙️ 2. 練習環境設定</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label class="flex items-center gap-3 p-3 bg-white rounded-lg shadow-sm cursor-pointer hover:bg-slate-50 touch-target">
+            <input type="checkbox" v-model="settings.tts" class="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500">
+            <div>
+              <div class="font-bold text-base text-slate-800">開啟語音報讀項目名稱</div>
+              <div class="text-xs text-slate-500">點選商品或幣鈔時自動讀出名稱</div>
+            </div>
+          </label>
+
+          <label class="flex items-center gap-3 p-3 bg-white rounded-lg shadow-sm cursor-pointer hover:bg-slate-50 touch-target">
+            <input type="checkbox" v-model="settings.splitScreen" class="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500">
+            <div>
+              <div class="font-bold text-base text-slate-800">開啟左右畫面分割同步</div>
+              <div class="text-xs text-slate-500">啟用雙人並坐操作模式，兩側畫面即時連動</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div class="border-b pb-1 flex justify-between items-end">
+          <h2 class="text-lg font-bold text-slate-700">✅ 3. 勾選本次練習要顯示的圖檔</h2>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex justify-between items-center bg-slate-200 p-1.5 rounded-lg px-3">
+            <span class="font-bold text-sm sm:text-base text-slate-700">📦 商品區 (供學生挑選購買)</span>
+            <div class="space-x-1">
+              <button @click="toggleGroupSelection('商品', true)" class="px-2.5 py-0.5 bg-white rounded shadow-sm text-xs font-bold hover:bg-slate-50">全選</button>
+              <button @click="toggleGroupSelection('商品', false)" class="px-2.5 py-0.5 bg-white rounded shadow-sm text-xs font-bold hover:bg-slate-50">全不選</button>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-lg border">
+            <label v-for="(item, idx) in goodsList" :key="'goods-'+idx" 
+                   class="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm cursor-pointer border hover:border-indigo-400 select-none"
+                   :class="{ 'ring-2 ring-indigo-500 bg-indigo-50/20': item.active }">
+              <input type="checkbox" v-model="item.active" class="mb-1 w-4 h-4 text-indigo-600 rounded">
+              <img :src="resolveImageUrl(item.url)" @error="handleImgError" class="w-12 h-12 object-cover rounded mb-1 bg-slate-100">
+              <span class="font-bold text-xs text-slate-800 text-center truncate w-full">{{ item.name }}</span>
+              <span class="text-xs font-semibold text-rose-600">${{ item.attr1 }}</span>
+            </label>
+            <div v-if="goodsList.length === 0" class="col-span-full text-center py-4 text-gray-400 text-sm">尚無商品資料載入</div>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex justify-between items-center bg-slate-200 p-1.5 rounded-lg px-3">
+            <span class="font-bold text-sm sm:text-base text-slate-700">💵 幣鈔區 (供學生付款結帳)</span>
+            <div class="space-x-1">
+              <button @click="toggleGroupSelection('幣鈔', true)" class="px-2.5 py-0.5 bg-white rounded shadow-sm text-xs font-bold hover:bg-slate-50">全選</button>
+              <button @click="toggleGroupSelection('幣鈔', false)" class="px-2.5 py-0.5 bg-white rounded shadow-sm text-xs font-bold hover:bg-slate-50">全不選</button>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-lg border">
+            <label v-for="(coin, idx) in currencyList" :key="'coin-'+idx" 
+                   class="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm cursor-pointer border hover:border-indigo-400 select-none"
+                   :class="{ 'ring-2 ring-indigo-500 bg-indigo-50/20': coin.active }">
+              <input type="checkbox" v-model="coin.active" class="mb-1 w-4 h-4 text-indigo-600 rounded">
+              <img :src="resolveImageUrl(coin.url)" @error="handleImgError" class="w-12 h-12 object-contain rounded mb-1 bg-slate-100">
+              <span class="font-bold text-xs text-slate-800 text-center truncate w-full">{{ coin.name }}</span>
+              <span class="text-xs font-semibold text-emerald-600">${{ coin.attr1 }}</span>
+            </label>
+            <div v-if="currencyList.length === 0" class="col-span-full text-center py-4 text-gray-400 text-sm">尚無幣鈔資料載入</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="pt-2 text-center shrink-0">
+        <button @click="startGame" 
+                :disabled="activeGoods.length === 0 || activeCurrency.length === 0"
+                class="w-full md:w-2/3 py-3 bg-rose-600 hover:bg-rose-700 disabled:bg-gray-300 text-white font-extrabold rounded-xl shadow-lg text-xl touch-target tracking-wide disabled:cursor-not-allowed">
+          🚀 開始購物練習
+        </button>
+      </div>
+
+    </div>
+
+
+    <div v-else class="flex-1 min-h-0 w-full" :class="settings.splitScreen ? 'grid grid-cols-1 md:grid-cols-2 gap-3 h-full min-h-0' : 'flex flex-col h-full min-h-0'">
+      
+      <div v-for="viewIndex in (settings.splitScreen ? 2 : 1)" :key="'viewport-' + viewIndex" 
+           class="bg-white rounded-xl sm:rounded-2xl shadow-xl p-2 sm:p-3 flex flex-col justify-between overflow-hidden border border-slate-200 h-full min-h-0">
+        
+        <div class="flex justify-between items-center mb-1 pb-1 border-b border-slate-100 shrink-0">
+          <span class="bg-indigo-100 text-indigo-800 font-bold px-2 sm:px-3 py-0.5 rounded-full text-xs sm:text-sm shrink-0">
+            {{ settings.splitScreen ? ('同步視窗 ' + viewIndex) : '練習模式' }}
+          </span>
+          
+          <button @click="backToSetup" class="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg text-xs sm:text-sm touch-target shrink-0 ml-auto">
+            ⚙️ 主設定選單
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 mb-1.5 shrink-0">
+          <span class="font-bold text-indigo-600 mr-auto shrink-0">🔎 獨立分區調整：</span>
+          
+          <template v-if="phase === 'shop'">
+            <label class="flex items-center gap-1 cursor-pointer shrink-0">
+              <span class="font-bold">上方商品:</span>
+              <input type="range" v-model.number="scales.shopGoods" min="0.6" max="1.6" step="0.05" class="w-14 sm:w-20 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer shrink-0">
+              <span class="font-bold">待結帳區:</span>
+              <input type="range" v-model.number="scales.shopCart" min="0.6" max="1.6" step="0.05" class="w-14 sm:w-20 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+            </label>
+          </template>
+
+          <template v-else-if="phase === 'pay'">
+            <label class="flex items-center gap-1 cursor-pointer shrink-0">
+              <span class="font-bold">購買確認清單:</span>
+              <input type="range" v-model.number="scales.payCart" min="0.6" max="1.6" step="0.05" class="w-12 sm:w-16 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer shrink-0">
+              <span class="font-bold">投入付款區:</span>
+              <input type="range" v-model.number="scales.payPaid" min="0.6" max="1.6" step="0.05" class="w-12 sm:w-16 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer shrink-0">
+              <span class="font-bold">下方幣鈔:</span>
+              <input type="range" v-model.number="scales.payCoins" min="0.6" max="1.6" step="0.05" class="w-12 sm:w-16 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+            </label>
+          </template>
+
+          <template v-else-if="phase === 'result'">
+            <label class="flex items-center gap-1 cursor-pointer shrink-0">
+              <span class="font-bold">總計金額區:</span>
+              <input type="range" v-model.number="scales.resultSummary" min="0.6" max="1.6" step="0.05" class="w-14 sm:w-20 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer shrink-0">
+              <span class="font-bold">找零圖示:</span>
+              <input type="range" v-model.number="scales.resultChange" min="0.6" max="1.6" step="0.05" class="w-14 sm:w-20 h-1.5 bg-gray-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer">
+            </label>
+          </template>
+        </div>
+
+
+        <template v-if="phase === 'shop'">
+          
+          <div class="flex-1 flex flex-col min-h-0">
+            <div class="bg-amber-50 border-l-4 border-amber-500 p-1.5 sm:p-2 rounded-r-lg mb-2 shrink-0">
+              <h3 class="font-bold text-amber-900 text-xs sm:text-sm">🛍️ 步驟一：請點選想買的商品（可重複點選累積金額）</h3>
+            </div>
+
+            <div class="overflow-y-auto pr-1 content-start flex-1 min-h-0 flex flex-wrap gap-2">
+              <div v-for="(item, idx) in activeGoods" :key="'shop-item-'+idx"
+                   @click="addItemToCart(item)"
+                   class="flex flex-col items-center p-2 bg-white border-2 border-slate-200 rounded-xl shadow-sm hover:border-amber-500 hover:bg-amber-50/30 cursor-pointer touch-target group shrink-0">
+                <img :src="resolveImageUrl(item.url)" @error="handleImgError" class="object-cover rounded-lg mb-1 bg-slate-100 group-hover:scale-105 transition shrink-0" 
+                     :style="{ width: (4.5 * scales.shopGoods) + 'rem', height: (4.5 * scales.shopGoods) + 'rem' }">
+                <div class="font-extrabold text-slate-800 text-center truncate max-w-[8rem]" :style="{ fontSize: (1 * scales.shopGoods) + 'rem' }">{{ item.name }}</div>
+                <div class="mt-1 font-black text-rose-700 bg-rose-100 rounded-full text-center" 
+                     :style="{ fontSize: (0.875 * scales.shopGoods) + 'rem', padding: (0.15 * scales.shopGoods) + 'rem ' + (0.6 * scales.shopGoods) + 'rem' }">
+                  ${{ item.attr1 }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-2 pt-2 border-t-2 border-slate-200 bg-slate-50 p-2 sm:p-3 rounded-xl shrink-0 flex flex-col max-h-[40%] min-h-0">
+            <div class="flex justify-between items-center mb-1.5 shrink-0">
+              <span class="font-bold text-xs sm:text-sm text-slate-700">👇 待結帳清單 (點選可刪除)：</span>
+              <span class="text-sm sm:text-base font-black text-rose-600 bg-white px-2.5 py-0.5 rounded-lg border shadow-sm shrink-0">
+                總計: ${{ cartTotal }} 元
+              </span>
+            </div>
+
+            <div class="flex flex-wrap gap-1.5 overflow-y-auto p-1.5 bg-white rounded-lg border items-start min-h-0 flex-1 content-start">
+              <div v-for="(cartItem, cIdx) in cart" :key="'cart-'+cartItem.uniqueId"
+                   @click="removeItemFromCart(cIdx)"
+                   class="flex items-center gap-1.5 pr-2 bg-slate-100 hover:bg-rose-100 text-slate-800 rounded-lg border border-slate-300 cursor-pointer touch-target group shrink-0">
+                <img :src="resolveImageUrl(cartItem.url)" @error="handleImgError" class="object-cover rounded-l-lg bg-white shrink-0" 
+                     :style="{ width: (2.25 * scales.shopCart) + 'rem', height: (2.25 * scales.shopCart) + 'rem' }">
+                <div class="font-bold truncate max-w-[5rem]" :style="{ fontSize: (0.875 * scales.shopCart) + 'rem' }">{{ cartItem.name }}</div>
+                <div class="font-black text-rose-600 shrink-0" :style="{ fontSize: (0.75 * scales.shopCart) + 'rem' }">${{ cartItem.attr1 }}</div>
+                <div class="text-xs text-slate-400 group-hover:text-rose-600 font-bold ml-0.5">✕</div>
+              </div>
+              <div v-if="cart.length === 0" class="w-full h-full flex items-center justify-center text-slate-400 font-bold text-xs sm:text-sm my-auto">
+                購物車目前空空的，請從上方挑選！
+              </div>
+            </div>
+
+            <button @click="confirmShopping" 
+                    :disabled="cart.length === 0"
+                    class="mt-2 w-full py-2 sm:py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white font-black rounded-lg shadow text-base sm:text-lg touch-target tracking-wider disabled:cursor-not-allowed shrink-0">
+              確定結帳 ➔
+            </button>
+          </div>
+        </template>
+
+
+        <template v-else-if="phase === 'pay'">
+          
+          <div class="bg-indigo-50 border-l-4 border-indigo-500 p-1.5 sm:p-2 rounded-r-lg mb-2 shrink-0">
+            <h3 class="font-bold text-indigo-900 text-xs sm:text-sm">💳 步驟二：請點選下方幣鈔投入付款區</h3>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5 min-h-0 flex-1 mb-2">
+            
+            <div class="bg-slate-50 p-2 sm:p-3 rounded-xl border flex flex-col justify-between min-h-0">
+              <div class="text-xs sm:text-sm font-bold text-slate-500 mb-1 pb-1 border-b shrink-0">🛍️ 購買物品確認</div>
+              
+              <div class="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0">
+                <div v-for="(cartItem, idx) in cart" :key="'pay-cart-'+idx" 
+                     class="flex items-center justify-between bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                  <div class="flex items-center gap-1.5 overflow-hidden">
+                    <img :src="resolveImageUrl(cartItem.url)" @error="handleImgError" class="object-cover rounded bg-slate-100 shrink-0" 
+                         :style="{ width: (2.25 * scales.payCart) + 'rem', height: (2.25 * scales.payCart) + 'rem' }">
+                    <span class="font-bold truncate text-slate-700 max-w-[6rem]" :style="{ fontSize: (0.875 * scales.payCart) + 'rem' }">{{ cartItem.name }}</span>
+                  </div>
+                  <span class="text-rose-600 font-black ml-1 shrink-0" :style="{ fontSize: (0.875 * scales.payCart) + 'rem' }">${{ cartItem.attr1 }}</span>
+                </div>
+              </div>
+
+              <div class="mt-1 pt-1 border-t text-right shrink-0">
+                <span class="text-[10px] sm:text-xs text-slate-500 block font-bold">應付總金額</span>
+                <span class="text-lg sm:text-xl font-black text-rose-600">${{ cartTotal }}</span>
+              </div>
+            </div>
+
+            <div class="bg-emerald-50 p-2 sm:p-3 rounded-xl border border-emerald-200 flex flex-col justify-between min-h-0">
+              <div class="text-xs sm:text-sm font-bold text-emerald-800 mb-1 pb-1 border-b border-emerald-200 flex justify-between shrink-0">
+                <span>📥 投入付款區</span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 animate-pulse font-normal">點擊可取回</span>
+              </div>
+              
+              <div class="flex-1 overflow-y-auto p-1 min-h-0 content-start flex flex-wrap gap-1">
+                <div v-for="(paidCoin, pIdx) in paidItems" :key="'paid-'+paidCoin.uniqueId"
+                     @click="removePaidItem(pIdx)"
+                     class="relative group cursor-pointer touch-target bg-white p-1 rounded shadow-sm border border-emerald-300 shrink-0">
+                  <img :src="resolveImageUrl(paidCoin.url)" @error="handleImgError" class="object-contain bg-slate-50 rounded shrink-0" 
+                       :style="{ width: (2.75 * scales.payPaid) + 'rem', height: (2.75 * scales.payPaid) + 'rem' }">
+                </div>
+                <div v-if="paidItems.length === 0" class="text-xs text-emerald-600/60 font-bold py-4 text-center w-full my-auto">
+                  請從下方點選幣鈔投入
+                </div>
+              </div>
+
+              <div class="mt-1 pt-1 border-t border-emerald-200 text-right shrink-0">
+                <span class="text-[10px] sm:text-xs text-emerald-800 block font-bold">已投入金額</span>
+                <span class="text-lg sm:text-xl font-black text-emerald-700">${{ paidTotal }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-2 text-center p-1.5 sm:p-2 rounded-lg font-bold text-xs sm:text-sm transition-all shrink-0"
+               :class="paidTotal >= cartTotal ? 'bg-emerald-100 text-emerald-800 animate-bounce' : 'bg-amber-100 text-amber-800'">
+            <span v-if="paidTotal < cartTotal">目前尚缺：${{ cartTotal - paidTotal }} 元</span>
+            <span v-else-if="paidTotal === cartTotal">金額剛剛好！請按下確認付款 🎉</span>
+            <span v-else>預計找零：${{ paidTotal - cartTotal }} 元，請按下確認付款</span>
+          </div>
+
+          <div class="border-t-2 border-slate-200 pt-2 bg-white shrink-0 flex flex-col max-h-[35%] min-h-0">
+            <div class="text-xs sm:text-sm font-bold text-slate-600 mb-1 shrink-0">💵 點擊下方幣鈔投入：</div>
+            
+            <div class="overflow-y-auto p-1 min-h-0 flex-1 flex flex-wrap gap-1.5 content-start">
+              <div v-for="(coin, idx) in activeCurrency" :key="'pay-coin-'+idx"
+                   @click="addPaidItem(coin)"
+                   class="flex flex-col items-center p-1.5 bg-slate-50 border-2 border-slate-200 rounded-lg shadow-sm hover:border-emerald-500 hover:bg-emerald-50 cursor-pointer touch-target shrink-0">
+                <img :src="resolveImageUrl(coin.url)" @error="handleImgError" class="object-contain mb-0.5 bg-white rounded shrink-0" 
+                     :style="{ width: (2.75 * scales.payCoins) + 'rem', height: (2.75 * scales.payCoins) + 'rem' }">
+                <span class="font-black text-slate-800 truncate max-w-[5rem] text-center" :style="{ fontSize: (0.875 * scales.payCoins) + 'rem' }">{{ coin.name }}</span>
+              </div>
+            </div>
+
+            <button @click="confirmPayment" 
+                    class="mt-2 w-full py-2 sm:py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-lg shadow text-base sm:text-lg touch-target tracking-wider shrink-0">
+              確認付款 💰
+            </button>
+          </div>
+        </template>
+
+
+        <template v-else-if="phase === 'result'">
+          <div class="flex-1 flex flex-col items-center justify-center text-center p-2 sm:p-4 overflow-y-auto min-h-0">
+            
+            <div class="w-14 h-14 sm:w-16 sm:h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mb-2 shadow-inner animate-pulse shrink-0">🎉</div>
+            <h2 class="text-xl sm:text-2xl font-black text-slate-800 mb-2 shrink-0">付款成功！</h2>
+            
+            <div class="w-full bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 my-1 max-w-md space-y-1.5 shrink-0" 
+                 :style="{ fontSize: (1 * scales.resultSummary) + 'rem' }">
+              <div class="flex justify-between font-bold text-slate-600">
+                <span>應付總額：</span><span>${{ cartTotal }} 元</span>
+              </div>
+              <div class="flex justify-between font-bold text-slate-600">
+                <span>實付總額：</span><span>${{ paidTotal }} 元</span>
+              </div>
+              <div class="border-t pt-1.5 flex justify-between font-black" :class="changeAmount > 0 ? 'text-amber-600' : 'text-emerald-600'" 
+                   :style="{ fontSize: (1.2 * scales.resultSummary) + 'rem' }">
+                <span>找零金額：</span><span>${{ changeAmount }} 元</span>
+              </div>
+            </div>
+
+            <div v-if="changeAmount > 0" class="w-full max-w-md min-h-0 flex flex-col flex-1 mt-1">
+              <div class="text-xs font-bold text-slate-500 mb-1 text-left shrink-0">💡 找零參考硬幣/鈔票：</div>
+              <div class="flex flex-wrap gap-1.5 justify-center bg-amber-50/50 p-2 rounded-lg border border-amber-200 overflow-y-auto min-h-0 flex-1 content-start">
+                <div v-for="(chgCoin, idx) in calculatedChangeItems" :key="'chg-'+idx" class="bg-white p-1 rounded shadow-sm border border-amber-300 flex flex-col items-center shrink-0">
+                  <img :src="resolveImageUrl(chgCoin.url)" @error="handleImgError" class="object-contain shrink-0" 
+                       :style="{ width: (2.25 * scales.resultChange) + 'rem', height: (2.25 * scales.resultChange) + 'rem' }">
+                  <span class="font-black text-slate-700 mt-0.5 truncate max-w-[4rem] text-center" :style="{ fontSize: (0.75 * scales.resultChange) + 'rem' }">{{ chgCoin.name }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-else class="font-bold text-emerald-700 mt-2 shrink-0" :style="{ fontSize: (1.1 * scales.resultSummary) + 'rem' }">👍 金額剛剛好，非常厲害！</div>
+
+          </div>
+
+          <div class="space-y-2 border-t pt-2 shrink-0 w-full max-w-md mx-auto mt-1">
+            <button @click="restartPractice" class="w-full py-2 sm:py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-lg shadow text-sm sm:text-base touch-target">
+              🔄 保留設定，再次練習
+            </button>
+            <button @click="backToSetup" class="w-full py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg text-xs sm:text-sm touch-target">
+              返回主設定選單
+            </button>
+          </div>
+        </template>
+
+      </div>
+    </div>
+
+    <div v-if="toastMsg" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-900/95 text-white px-5 py-2.5 rounded-full shadow-2xl font-bold text-base flex items-center gap-2 z-50 animate-bounce">
+      <span>⚠️</span><span>{{ toastMsg }}</span>
+    </div>
+
+  </div>
+
+  <script>
+    const { createApp, ref, computed, watch } = Vue;
+
+    const INITIAL_FALLBACK_DATA = [
+      { name: "蘋果", category: "商品", attr1: "25", url: "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=150" },
+      { name: "牛奶", category: "商品", attr1: "80", url: "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=150" },
+      { name: "麵包", category: "商品", attr1: "35", url: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=150" },
+      { name: "餅乾", category: "商品", attr1: "50", url: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=150" },
+      { name: "1元", category: "幣鈔", attr1: "1", url: "https://fakeimg.pl/100x100/E0E0E0/000?text=1元&font=noto" },
+      { name: "5元", category: "幣鈔", attr1: "5", url: "https://fakeimg.pl/100x100/E0E0E0/000?text=5元&font=noto" },
+      { name: "10元", category: "幣鈔", attr1: "10", url: "https://fakeimg.pl/100x100/C0C0C0/000?text=10元&font=noto" },
+      { name: "50元", category: "幣鈔", attr1: "50", url: "https://fakeimg.pl/100x100/FFD700/000?text=50元&font=noto" },
+      { name: "100元", category: "幣鈔", attr1: "100", url: "https://fakeimg.pl/150x80/FFCCCC/000?text=100元&font=noto" }
+    ];
+
+    createApp({
+      setup() {
+        const phase = ref('setup');
+        const rawItems = ref([]);
+        const selectedPreset = ref('');
+        const customUrl = ref('');
+        const loadStatusText = ref('');
+        const toastMsg = ref('');
+        const activeRemoteBase = ref('https://raw.githubusercontent.com/tpectim/picoffline/main/');
+
+        // --- 🌟 獨立分區設定值：共 7 組參數獨立永久記憶 (透過 localStorage) ---
+        const scales = ref({
+          shopGoods: parseFloat(localStorage.getItem('sp_scale_shopGoods')) || 1.0,
+          shopCart: parseFloat(localStorage.getItem('sp_scale_shopCart')) || 1.0,
+          payCart: parseFloat(localStorage.getItem('sp_scale_payCart')) || 1.0,
+          payPaid: parseFloat(localStorage.getItem('sp_scale_payPaid')) || 1.0,
+          payCoins: parseFloat(localStorage.getItem('sp_scale_payCoins')) || 1.0,
+          resultSummary: parseFloat(localStorage.getItem('sp_scale_resultSummary')) || 1.0,
+          resultChange: parseFloat(localStorage.getItem('sp_scale_resultChange')) || 1.0
+        });
+        
+        // 監聽所有縮放設定，一有拉動即時儲存本機
+        watch(scales, (newVal) => {
+          localStorage.setItem('sp_scale_shopGoods', newVal.shopGoods);
+          localStorage.setItem('sp_scale_shopCart', newVal.shopCart);
+          localStorage.setItem('sp_scale_payCart', newVal.payCart);
+          localStorage.setItem('sp_scale_payPaid', newVal.payPaid);
+          localStorage.setItem('sp_scale_payCoins', newVal.payCoins);
+          localStorage.setItem('sp_scale_resultSummary', newVal.resultSummary);
+          localStorage.setItem('sp_scale_resultChange', newVal.resultChange);
+        }, { deep: true });
+
+        const remoteJsonFiles = ref([]);
+        const isFetchingList = ref(false);
+
+        const settings = ref({ tts: true, splitScreen: false });
+        const cart = ref([]);
+        const paidItems = ref([]);
+
+        const showToast = (msg, duration = 3000) => {
+          toastMsg.value = msg;
+          setTimeout(() => { toastMsg.value = ''; }, duration);
+        };
+
+        // 完美保留前次修正：同時支援讀取 url 與 original 欄位
+        const loadRawData = (dataArray) => {
+          rawItems.value = dataArray.map((item) => ({
+            ...item,
+            attr1: item.attr1 != null ? String(item.attr1).trim() : "0",
+            url: item.url || item.original || "",
+            active: true
+          }));
+        };
+
+        const fetchRemoteJson = async () => {
+          let targetUrl = customUrl.value.trim();
+          if (!targetUrl) {
+            showToast("請選擇檔案或填寫有效的網址");
+            return;
+          }
+
+          if (targetUrl.includes('github.com') && !targetUrl.includes('raw.githubusercontent.com')) {
+            targetUrl = targetUrl.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+            customUrl.value = targetUrl;
+          }
+
+          loadStatusText.value = '連線下載中...';
+          
+          const tryList = [
+            targetUrl,
+            targetUrl.replace('https://raw.githubusercontent.com/', 'https://cdn.jsdelivr.net/gh/')
+                     .replace('/main/', '@main/')
+                     .replace('/master/', '@master/')
+          ];
+
+          let fetchedData = null;
+          let successUrl = '';
+
+          for (const url of tryList) {
+            try {
+              const res = await fetch(url);
+              if (res.ok) {
+                fetchedData = await res.json();
+                successUrl = url;
+                break;
+              }
+            } catch (e) {
+              console.warn("嘗試下載失敗，重試中...", e);
+            }
+          }
+
+          if (fetchedData) {
+            const list = Array.isArray(fetchedData) ? fetchedData : (fetchedData.items || fetchedData.data || []);
+            if (list.length === 0) {
+              showToast("檔案下載成功，但內容無項目");
+              loadStatusText.value = '資料為空';
+              return;
+            }
+
+            const parts = successUrl.split('/');
+            parts.pop();
+            activeRemoteBase.value = parts.join('/') + '/';
+
+            loadRawData(list);
+            loadStatusText.value = '載入成功！';
+            showToast("已成功載入該題庫！");
+          } else {
+            loadStatusText.value = '載入失敗';
+            showToast("讀取失敗：請檢查網路連線或檔案內容格式");
+          }
+          
+          setTimeout(() => { loadStatusText.value = ''; }, 3500);
+        };
+
+        const fetchGithubRepoContents = async () => {
+          isFetchingList.value = true;
+          loadStatusText.value = '搜尋線上檔案中...';
+          try {
+            const res = await fetch('https://api.github.com/repos/tpectim/picoffline/contents');
+            if (!res.ok) throw new Error(`API 請求失敗: ${res.status}`);
+            const items = await res.json();
+            
+            const fetchedFiles = items
+              .filter(item => item.type === 'file' && item.name.endsWith('.json'))
+              .map(item => ({
+                name: item.name,
+                url: item.download_url || `https://raw.githubusercontent.com/tpectim/picoffline/main/${item.path}`
+              }));
+
+            remoteJsonFiles.value = fetchedFiles;
+            
+            if (fetchedFiles.length > 0) {
+              selectedPreset.value = fetchedFiles[0].url;
+              customUrl.value = fetchedFiles[0].url;
+              await fetchRemoteJson();
+            } else {
+              loadStatusText.value = '未找到 JSON 檔案';
+              selectedPreset.value = 'default';
+              loadRawData(INITIAL_FALLBACK_DATA);
+            }
+          } catch (err) {
+            console.warn("自動取得 GitHub 檔案清單失敗：", err);
+            loadStatusText.value = '取得清單失敗';
+            showToast("無法連線取得遠端清單，已套用內建題庫");
+            selectedPreset.value = 'default';
+            loadRawData(INITIAL_FALLBACK_DATA);
+          } finally {
+            isFetchingList.value = false;
+          }
+        };
+
+        fetchGithubRepoContents();
+
+        const handlePresetChange = () => {
+          if (selectedPreset.value === 'default') {
+            loadRawData(INITIAL_FALLBACK_DATA);
+            customUrl.value = '';
+            showToast("已載入內建基礎範例資料");
+          } else if (selectedPreset.value === 'custom') {
+            customUrl.value = '';
+          } else if (selectedPreset.value) {
+            customUrl.value = selectedPreset.value;
+            fetchRemoteJson();
+          }
+        };
+
+        const goodsList = computed(() => rawItems.value.filter(i => i.category === '商品'));
+        const currencyList = computed(() => rawItems.value.filter(i => i.category === '幣鈔'));
+        const activeGoods = computed(() => goodsList.value.filter(i => i.active));
+        const activeCurrency = computed(() => currencyList.value.filter(i => i.active));
+
+        const cartTotal = computed(() => cart.value.reduce((sum, item) => sum + (parseInt(item.attr1, 10) || 0), 0));
+        const paidTotal = computed(() => paidItems.value.reduce((sum, item) => sum + (parseInt(item.attr1, 10) || 0), 0));
+        const changeAmount = computed(() => Math.max(0, paidTotal.value - cartTotal.value));
+
+        const calculatedChangeItems = computed(() => {
+          let diff = changeAmount.value;
+          if (diff <= 0) return [];
+          const availableCoins = [...activeCurrency.value]
+            .map(c => ({ ...c, val: parseInt(c.attr1, 10) || 0 }))
+            .filter(c => c.val > 0)
+            .sort((a, b) => b.val - a.val);
+
+          const result = [];
+          for (const coin of availableCoins) {
+            while (diff >= coin.val) {
+              result.push(coin);
+              diff -= coin.val;
+            }
+          }
+          return result;
+        });
+
+        const resolveImageUrl = (url) => {
+          if (!url) return '';
+          if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+          return activeRemoteBase.value + url.replace(/^\//, '');
+        };
+
+        const handleImgError = (e) => {
+          e.target.src = 'https://fakeimg.pl/100x100/F0F0F0/999?text=無圖檔&font=noto';
+        };
+
+        const speakText = (text) => {
+          if (!settings.value.tts || !('speechSynthesis' in window)) return;
+          window.speechSynthesis.cancel();
+          const utter = new SpeechSynthesisUtterance(text);
+          utter.lang = 'zh-TW';
+          window.speechSynthesis.speak(utter);
+        };
+
+        const importLocalJson = (event) => {
+          const file = event.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = JSON.parse(e.target.result);
+              const list = Array.isArray(data) ? data : (data.items || data.data || []);
+              loadRawData(list);
+              selectedPreset.value = 'custom';
+              showToast("本機檔案匯入成功！");
+            } catch (err) {
+              showToast("檔案格式錯誤，必須為正確的 JSON");
+            }
+            event.target.value = '';
+          };
+          reader.readAsText(file);
+        };
+
+        const exportLocalJson = () => {
+          const exportData = rawItems.value.map(i => {
+            const { active, ...rest } = i;
+            return rest;
+          });
+          const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+          const downloadAnchor = document.createElement('a');
+          downloadAnchor.setAttribute("href", dataStr);
+          downloadAnchor.setAttribute("download", "shopping_setting.json");
+          document.body.appendChild(downloadAnchor);
+          downloadAnchor.click();
+          downloadAnchor.remove();
+          showToast("設定檔已匯出！");
+        };
+
+        const toggleGroupSelection = (category, state) => {
+          rawItems.value.forEach(item => { if (item.category === category) item.active = state; });
+        };
+
+        const startGame = () => { cart.value = []; paidItems.value = []; phase.value = 'shop'; };
+        const backToSetup = () => { phase.value = 'setup'; };
+        const restartPractice = () => { cart.value = []; paidItems.value = []; phase.value = 'shop'; };
+
+        const addItemToCart = (item) => {
+          speakText(item.name);
+          cart.value.push({ ...item, uniqueId: Date.now() + Math.random() });
+        };
+        const removeItemFromCart = (index) => { cart.value.splice(index, 1); };
+        const confirmShopping = () => { paidItems.value = []; phase.value = 'pay'; };
+
+        const addPaidItem = (coin) => {
+          speakText(coin.name);
+          paidItems.value.push({ ...coin, uniqueId: Date.now() + Math.random() });
+        };
+        const removePaidItem = (index) => { paidItems.value.splice(index, 1); };
+
+        const confirmPayment = () => {
+          if (paidTotal.value < cartTotal.value) {
+            speakText("金額不足");
+            showToast(`金額不足！還欠 ${cartTotal.value - paidTotal.value} 元`);
+          } else {
+            if (paidTotal.value === cartTotal.value) speakText("付款成功，金額剛剛好");
+            else speakText(`付款成功，找零 ${changeAmount.value} 元`);
+            phase.value = 'result';
+          }
+        };
+
+        return {
+          phase, rawItems, selectedPreset, customUrl, loadStatusText, toastMsg, settings,
+          remoteJsonFiles, isFetchingList, scales,
+          goodsList, currencyList, activeGoods, activeCurrency, cart, paidItems, cartTotal,
+          paidTotal, changeAmount, calculatedChangeItems, resolveImageUrl, handleImgError,
+          fetchGithubRepoContents, handlePresetChange, fetchRemoteJson, importLocalJson, exportLocalJson,
+          toggleGroupSelection, startGame, backToSetup, restartPractice, addItemToCart,
+          removeItemFromCart, confirmShopping, addPaidItem, removePaidItem, confirmPayment
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
