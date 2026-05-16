@@ -15,12 +15,17 @@
     ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
     ::-webkit-scrollbar-thumb { background: #c5c5c5; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    /* 隱藏數字輸入框的上下箭頭 */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   </style>
 </head>
 <body class="bg-slate-100 font-sans h-screen w-screen overflow-hidden select-none">
 
   <div id="app" class="h-screen w-screen flex flex-col overflow-hidden p-2 sm:p-3 max-w-7xl mx-auto">
     
+    <input type="file" ref="imageUploader" @change="handleImageUpload" accept="image/*" class="hidden">
+
     <header v-if="phase === 'setup'" class="text-center mb-3 shrink-0">
       <h1 class="text-2xl sm:text-3xl font-bold tracking-wider text-indigo-700">🛒 購物與付款綜合練習</h1>
       <p class="text-gray-500 mt-1 text-xs sm:text-sm">全螢幕觸控最佳化版・支援分區大小獨立調整與本機記憶</p>
@@ -106,28 +111,50 @@
 
       <div class="space-y-4">
         <div class="border-b pb-1 flex justify-between items-end">
-          <h2 class="text-lg font-bold text-slate-700">✅ 3. 勾選本次練習要顯示的圖檔</h2>
+          <h2 class="text-lg font-bold text-slate-700">✅ 3. 調整與勾選練習圖檔</h2>
         </div>
 
         <div class="space-y-2">
           <div class="flex justify-between items-center bg-slate-200 p-1.5 rounded-lg px-3">
-            <span class="font-bold text-sm sm:text-base text-slate-700">📦 商品區 (供學生挑選購買)</span>
+            <span class="font-bold text-sm sm:text-base text-slate-700">📦 商品區 (供挑選購買) <span class="text-xs text-slate-500 font-normal ml-2">點擊名稱/金額可修改，點擊圖片可換圖</span></span>
             <div class="space-x-1">
               <button @click="toggleGroupSelection('商品', true)" class="px-2.5 py-0.5 bg-white rounded shadow-sm text-xs font-bold hover:bg-slate-50">全選</button>
               <button @click="toggleGroupSelection('商品', false)" class="px-2.5 py-0.5 bg-white rounded shadow-sm text-xs font-bold hover:bg-slate-50">全不選</button>
             </div>
           </div>
           
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-lg border">
-            <label v-for="(item, idx) in goodsList" :key="'goods-'+idx" 
-                   class="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm cursor-pointer border hover:border-indigo-400 select-none"
-                   :class="{ 'ring-2 ring-indigo-500 bg-indigo-50/20': item.active }">
-              <input type="checkbox" v-model="item.active" class="mb-1 w-4 h-4 text-indigo-600 rounded">
-              <img :src="resolveImageUrl(item.url)" @error="handleImgError" class="w-12 h-12 object-cover rounded mb-1 bg-slate-100">
-              <span class="font-bold text-xs text-slate-800 text-center truncate w-full">{{ item.name }}</span>
-              <span class="text-xs font-semibold text-rose-600">${{ item.attr1 }}</span>
-            </label>
-            <div v-if="goodsList.length === 0" class="col-span-full text-center py-4 text-gray-400 text-sm">尚無商品資料載入</div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 max-h-64 overflow-y-auto p-2 bg-slate-50 rounded-lg border">
+            
+            <div v-for="(item, idx) in goodsList" :key="'goods-'+idx" 
+                 class="relative flex flex-col items-center p-2 bg-white rounded-lg shadow-sm border transition-colors"
+                 :class="{ 'ring-2 ring-indigo-500 bg-indigo-50/20': item.active, 'border-slate-200': !item.active }">
+              
+              <button @click="deleteItem(item)" class="absolute -top-2 -left-2 bg-red-100 hover:bg-red-500 text-red-600 hover:text-white rounded-full p-1 shadow-sm z-10 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </button>
+
+              <input type="checkbox" v-model="item.active" class="absolute top-1 right-1 w-4 h-4 text-indigo-600 rounded cursor-pointer z-10">
+              
+              <div class="relative w-12 h-12 mb-1.5 group cursor-pointer" @click="triggerImageUpload(item)" title="點擊更換圖片">
+                <img :src="resolveImageUrl(item.url)" @error="handleImgError" class="w-12 h-12 object-cover rounded bg-slate-100 border border-slate-200 group-hover:opacity-50 transition-opacity">
+                <div class="absolute inset-0 hidden group-hover:flex items-center justify-center text-[10px] font-bold text-slate-800 bg-white/70 rounded">換圖</div>
+              </div>
+              
+              <input type="text" v-model="item.name" placeholder="名稱" class="w-full text-xs font-bold text-slate-800 text-center bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none mb-1 px-1">
+              
+              <div class="flex items-center justify-center w-full">
+                <span class="text-xs font-semibold text-rose-600 mr-0.5">$</span>
+                <input type="number" v-model="item.attr1" placeholder="金額" class="w-full text-xs font-semibold text-rose-600 text-center bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none px-1">
+              </div>
+            </div>
+
+            <div @click="addNewItem('商品')" class="flex flex-col items-center justify-center p-2 bg-slate-100 rounded-lg border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer min-h-[110px] touch-target text-slate-400 hover:text-indigo-500 transition-colors">
+              <span class="text-2xl mb-1">➕</span>
+              <span class="text-xs font-bold">新增商品</span>
+            </div>
+
           </div>
         </div>
 
@@ -149,8 +176,7 @@
               <span class="font-bold text-xs text-slate-800 text-center truncate w-full">{{ coin.name }}</span>
               <span class="text-xs font-semibold text-emerald-600">${{ coin.attr1 }}</span>
             </label>
-            <div v-if="currencyList.length === 0" class="col-span-full text-center py-4 text-gray-400 text-sm">尚無幣鈔資料載入</div>
-          </div>
+            </div>
         </div>
 
       </div>
@@ -164,7 +190,6 @@
       </div>
 
     </div>
-
 
     <div v-else class="flex-1 min-h-0 w-full" :class="settings.splitScreen ? 'grid grid-cols-1 md:grid-cols-2 gap-3 h-full min-h-0' : 'flex flex-col h-full min-h-0'">
       
@@ -437,7 +462,7 @@
         const toastMsg = ref('');
         const activeRemoteBase = ref('https://raw.githubusercontent.com/tpectim/picoffline/main/');
 
-        // --- 🌟 獨立分區設定值：共 7 組參數獨立永久記憶 (透過 localStorage) ---
+        // --- 🌟 獨立分區設定值：共 7 組參數獨立永久記憶 ---
         const scales = ref({
           shopGoods: parseFloat(localStorage.getItem('sp_scale_shopGoods')) || 1.0,
           shopCart: parseFloat(localStorage.getItem('sp_scale_shopCart')) || 1.0,
@@ -448,7 +473,6 @@
           resultChange: parseFloat(localStorage.getItem('sp_scale_resultChange')) || 1.0
         });
         
-        // 監聽所有縮放設定，一有拉動即時儲存本機
         watch(scales, (newVal) => {
           localStorage.setItem('sp_scale_shopGoods', newVal.shopGoods);
           localStorage.setItem('sp_scale_shopCart', newVal.shopCart);
@@ -461,17 +485,59 @@
 
         const remoteJsonFiles = ref([]);
         const isFetchingList = ref(false);
-
         const settings = ref({ tts: true, splitScreen: false });
         const cart = ref([]);
         const paidItems = ref([]);
+
+        // --- 🌟 新增/編輯相關邏輯 ---
+        const imageUploader = ref(null);
+        let currentEditItem = null;
+
+        const triggerImageUpload = (item) => {
+          currentEditItem = item;
+          if (imageUploader.value) {
+            imageUploader.value.click();
+          }
+        };
+
+        const handleImageUpload = (event) => {
+          const file = event.target.files[0];
+          if (!file || !currentEditItem) return;
+          
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            currentEditItem.url = e.target.result; // 將圖片轉為 Base64 寫入
+          };
+          reader.readAsDataURL(file);
+          event.target.value = ''; // 重置 input 狀態
+        };
+
+        const addNewItem = (category) => {
+          rawItems.value.push({
+            name: "新" + category,
+            category: category,
+            attr1: "10",
+            url: "https://fakeimg.pl/100x100/F0F0F0/999?text=上傳圖檔&font=noto",
+            active: true
+          });
+          // 滾動到最底（選用）
+          setTimeout(() => {
+            const container = document.querySelector('.max-h-64');
+            if(container) container.scrollTop = container.scrollHeight;
+          }, 50);
+        };
+
+        const deleteItem = (itemToRemove) => {
+          if (confirm(`確定要刪除「${itemToRemove.name}」嗎？`)) {
+            rawItems.value = rawItems.value.filter(item => item !== itemToRemove);
+          }
+        };
 
         const showToast = (msg, duration = 3000) => {
           toastMsg.value = msg;
           setTimeout(() => { toastMsg.value = ''; }, duration);
         };
 
-        // 完美保留前次修正：同時支援讀取 url 與 original 欄位
         const loadRawData = (dataArray) => {
           rawItems.value = dataArray.map((item) => ({
             ...item,
@@ -711,7 +777,9 @@
           paidTotal, changeAmount, calculatedChangeItems, resolveImageUrl, handleImgError,
           fetchGithubRepoContents, handlePresetChange, fetchRemoteJson, importLocalJson, exportLocalJson,
           toggleGroupSelection, startGame, backToSetup, restartPractice, addItemToCart,
-          removeItemFromCart, confirmShopping, addPaidItem, removePaidItem, confirmPayment
+          removeItemFromCart, confirmShopping, addPaidItem, removePaidItem, confirmPayment,
+          // 導出新增編輯用變數與方法
+          imageUploader, triggerImageUpload, handleImageUpload, addNewItem, deleteItem
         };
       }
     }).mount('#app');
